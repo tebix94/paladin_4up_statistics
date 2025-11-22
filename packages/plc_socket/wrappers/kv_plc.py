@@ -1,4 +1,5 @@
 import socket
+import threading
 
 class kv_plc_tcp_socket:
     def __init__(self, ipv4_address: str, port_number: int, timeout: int | None = None):
@@ -15,6 +16,7 @@ class kv_plc_tcp_socket:
         self.__port_number = port_number
         self.__timeout = timeout if timeout is not None else 3
         self.__socket = socket.create_connection((self.__address, self.__port_number), timeout=self.__timeout)
+        self.__lock = threading.Lock()
 
     def __del__(self):
         self.__socket.close()
@@ -33,9 +35,11 @@ class kv_plc_tcp_socket:
         if device not in self.__valid_devices:
             raise ValueError(f'Unsupported device type {device}')
         
-        # Send message from socket
-        self.__socket.sendall(f'RD {device}{device_number}\r'.encode('ascii'))
-        server_response = self.__socket.recv(1024)
+        # Use lock context manager from thread module to avoid race conditions in socket buffer
+        with self.__lock:
+            # Send message from socket
+            self.__socket.sendall(f'RD {device}{device_number}\r'.encode('ascii'))
+            server_response = self.__socket.recv(1024)
 
         # Check for empty response before decoding
         if server_response == b'':
@@ -84,14 +88,18 @@ class kv_plc_tcp_socket:
                     raise ValueError(f'Unsupported device value, {device} with data value {data} is out of range')
         
         # Process the value to be sent accordingly to the data type of the data parameter
-        if type(data) == bool:
-            value = str(int(data))
-        elif type(data) == int:
-            value = str(data)
+        data_value = data
 
-        # Send message from socket
-        self.__socket.sendall(f'WR {device}{device_number} {value}\r'.encode('ascii'))
-        server_response = self.__socket.recv(1024) # Wait for server response just to take out the message from the socket buffer
+        if type(data_value) == bool:
+            data_value = str(int(data))
+        elif type(data_value) == int:
+            data_value = str(data)
+
+        # Use lock context manager from thread module to avoid race conditions in socket buffer
+        with self.__lock:
+            # Send message from socket
+            self.__socket.sendall(f'WR {device}{device_number} {data_value}\r'.encode('ascii'))
+            server_response = self.__socket.recv(1024) # Wait for server response just to take out the message from the socket buffer
 
         if server_response == b'':
             raise Exception('Connection closed by peer')
