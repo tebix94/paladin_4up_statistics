@@ -6,7 +6,7 @@ from packages.plc_socket import kv_plc_tcp_socket
 import math
 
 # Constants
-SAMPLE_SIZE = 100
+SAMPLE_SIZE = 500
 FILENAME = 'Paladin_CT_sample.xlsx'
 PLC_NAMES = ('M1 Gasket',
              'M2 PHD',
